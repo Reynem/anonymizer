@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">skillset</string>
+    <string name="send_file">Отправить файл</string>
+    <string name="anonymize_text">Анонимизировать текст</string>
+</resources>
