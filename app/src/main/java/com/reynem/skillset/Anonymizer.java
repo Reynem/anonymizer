@@ -1,6 +1,5 @@
 package com.reynem.skillset;
 
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Anonymizer {
@@ -34,6 +33,14 @@ public class Anonymizer {
         }
 
         return anonymized.toString();
+    }
+
+    public static boolean containsPersonalData(String text) {
+        return FIO_PATTERN.matcher(text).find() ||
+                FIO_ENG_PATTERN.matcher(text).find() ||
+                IIN_PATTERN.matcher(text).find() ||
+                BANK_ACCOUNT_PATTERN_KZ_IBAN.matcher(text).find() ||
+                BANK_CARD_PATTERN.matcher(text).find();
     }
 
     private static String anonymizeLine(String line) {

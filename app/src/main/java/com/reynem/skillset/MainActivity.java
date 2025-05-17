@@ -1,5 +1,6 @@
 package com.reynem.skillset;
 
+import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -10,19 +11,19 @@ import android.graphics.ImageDecoder;
 import android.graphics.Paint;  // Импортируем Paint
 import android.graphics.Rect;   // Импортируем Rect
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.text.TextUtils;
 import android.util.Log;
+import android.view.View;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 // import com.google.android.gms.tasks.Task; // Уже импортирован неявно через TextRecognizer
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
@@ -33,6 +34,7 @@ import com.reynem.skillset.databinding.ActivityMainBinding;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
@@ -61,7 +63,11 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        binding.AnonFile.setOnClickListener(v -> openFilePicker());
+        binding.AnonFile.setOnClickListener(v -> {
+            openFilePicker();
+            binding.resultImageView.setVisibility(View.VISIBLE);
+            binding.resultText.setText("");
+        });
 
         binding.AnonText.setOnClickListener(v -> {
             String _text = binding.editTextText.getText().toString();
@@ -71,6 +77,8 @@ public class MainActivity extends AppCompatActivity {
             }
             String _new_text = Anonymizer.anonymizeText(_text);
             binding.resultText.setText(_new_text);
+            binding.resultImageView.setVisibility(View.INVISIBLE);
+            binding.editTextText.setText("");
         });
     }
 
@@ -91,6 +99,7 @@ public class MainActivity extends AppCompatActivity {
         return contentResolver.getType(uri);
     }
 
+    @SuppressLint("SetTextI18n")
     private void processFile(Uri fileUri) {
         String mimeType = getMimeType(fileUri);
         Log.d(TAG, "Processing file: " + fileUri.toString() + ", MIME type: " + mimeType);
@@ -116,65 +125,55 @@ public class MainActivity extends AppCompatActivity {
 
             Log.d(TAG, "Starting text recognition for image.");
             recognizer.process(image)
-                    .addOnSuccessListener(new OnSuccessListener<Text>() {
-                        @Override
-                        public void onSuccess(Text visionText) {
-                            Log.d(TAG, "Text recognition successful.");
-                            // Создаем изменяемую копию оригинального Bitmap
-                            Bitmap mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true);
-                            Canvas canvas = new Canvas(mutableBitmap);
-                            Paint paint = new Paint();
-                            paint.setColor(Color.BLACK); // Черный цвет для прямоугольников
-                            paint.setStyle(Paint.Style.FILL); // Заливка
+                    .addOnSuccessListener(visionText -> {
+                        Log.d(TAG, "Text recognition successful.");
+                        Bitmap mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true);
+                        Canvas canvas = new Canvas(mutableBitmap);
+                        Paint paint = new Paint();
+                        paint.setColor(Color.BLACK); // Черный цвет для прямоугольников
+                        paint.setStyle(Paint.Style.FILL); // Заливка
 
-                            StringBuilder recognizedTextBuilder = new StringBuilder();
+                        Log.d(TAG, "Распознано слов: " + visionText.getTextBlocks().size());
+                        Log.d(TAG, "Полный текст: " + visionText.getText());
 
-                            Log.d(TAG, "Распознано слов: " + visionText.getTextBlocks().size());
-                            Log.d(TAG, "Полный текст: " + visionText.getText());
+                        if (visionText.getTextBlocks().isEmpty()) {
+                            Log.d(TAG, "No text blocks found.");
+                            Toast.makeText(MainActivity.this, "Текст на изображении не найден.", Toast.LENGTH_SHORT).show();
+                            binding.resultImageView.setImageBitmap(originalBitmap); // Показываем оригинал, если текста нет
+                            return;
+                        }
 
-                            if (visionText.getTextBlocks().isEmpty()) {
-                                Log.d(TAG, "No text blocks found.");
-                                Toast.makeText(MainActivity.this, "Текст на изображении не найден.", Toast.LENGTH_SHORT).show();
-                                binding.resultImageView.setImageBitmap(originalBitmap); // Показываем оригинал, если текста нет
-                                return;
-                            }
 
-                            // Итерируем по блокам текста
-                            for (Text.TextBlock block : visionText.getTextBlocks()) {
-                                recognizedTextBuilder.append(block.getText()).append(" "); // Собираем весь текст
-                                Rect blockFrame = block.getBoundingBox(); // Получаем рамку блока
-                                if (blockFrame != null) {
-                                    canvas.drawRect(blockFrame, paint); // Рисуем черный прямоугольник
-                                    Log.d(TAG, "Drew rect for block: " + block.getText() + " at " + blockFrame.flattenToString());
+                        for (Text.TextBlock block : visionText.getTextBlocks()) {
+                            for (Text.Line line : block.getLines()) {
+                                List<Text.Element> elements = line.getElements();
+                                String lineText = null;
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                    lineText = TextUtils.join(" ", elements.stream().map(Text.Element::getText).toList());
+                                }
+
+                                if (Anonymizer.containsPersonalData(lineText)) {
+                                    Rect lineFrame = line.getBoundingBox();
+                                    if (lineFrame != null) {
+                                        canvas.drawRect(lineFrame, paint);
+                                        Log.d(TAG, "Закрашена строка: " + lineText + " в " + lineFrame.flattenToString());
+                                    }
                                 }
                             }
-
-                            // Отображаем измененное изображение
-                            binding.resultImageView.setImageBitmap(mutableBitmap);
-                            Log.d(TAG, "Displayed modified bitmap.");
-
-                            // Анонимизируем собранный текст и отображаем его
-                            String fullRecognizedText = recognizedTextBuilder.toString().trim();
-                            if (!fullRecognizedText.isEmpty()) {
-                                Toast.makeText(MainActivity.this, "Изображение обработано, текст анонимизирован.", Toast.LENGTH_LONG).show();
-                            } else {
-                                // Это условие маловероятно, если были TextBlocks, но на всякий случай
-                                Log.d(TAG, "Текст на изображении не содержит распознаваемых данных для анонимизации.");
-                                Toast.makeText(MainActivity.this, "Распознанный текст пуст.", Toast.LENGTH_SHORT).show();
-                            }
-
-                            saveImageToGallery(mutableBitmap);
                         }
+
+                        // Отображаем измененное изображение
+                        binding.resultImageView.setImageBitmap(mutableBitmap);
+                        Log.d(TAG, "Displayed modified bitmap.");
+
+                        saveImageToGallery(mutableBitmap);
                     })
                     .addOnFailureListener(
-                            new OnFailureListener() {
-                                @Override
-                                public void onFailure(@NonNull Exception e) {
-                                    Log.e(TAG, "Text recognition failed.", e);
-                                    binding.resultText.setText("Ошибка распознавания текста: " + e.getMessage());
-                                    Toast.makeText(MainActivity.this, "Ошибка распознавания текста: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                                    binding.resultImageView.setImageBitmap(originalBitmap);
-                                }
+                            e -> {
+                                Log.e(TAG, "Text recognition failed.", e);
+                                binding.resultText.setText("Ошибка распознавания текста: " + e.getMessage());
+                                Toast.makeText(MainActivity.this, "Ошибка распознавания текста: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                binding.resultImageView.setImageBitmap(originalBitmap);
                             });
 
         } else if (mimeType.equals("application/pdf")) {
