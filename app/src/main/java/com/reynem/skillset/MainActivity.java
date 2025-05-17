@@ -31,10 +31,12 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import com.reynem.skillset.databinding.ActivityMainBinding;
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.Objects;
 
 public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
@@ -62,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        PDFBoxResourceLoader.init(getApplicationContext());
 
         binding.AnonFile.setOnClickListener(v -> {
             openFilePicker();
@@ -70,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         binding.AnonText.setOnClickListener(v -> {
-            String _text = binding.editTextText.getText().toString();
+            String _text = Objects.requireNonNull(binding.inputText.getText()).toString();
             if (_text.isEmpty()) {
                 Toast.makeText(this, "Введите текст для анонимизации", Toast.LENGTH_SHORT).show();
                 return;
@@ -78,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
             String _new_text = Anonymizer.anonymizeText(_text);
             binding.resultText.setText(_new_text);
             binding.resultImageView.setVisibility(View.INVISIBLE);
-            binding.editTextText.setText("");
+            binding.inputText.setText("");
         });
     }
 
@@ -177,9 +180,32 @@ public class MainActivity extends AppCompatActivity {
                             });
 
         } else if (mimeType.equals("application/pdf")) {
-            Toast.makeText(this, "Обработка PDF (пока не реализована)...", Toast.LENGTH_SHORT).show();
-            binding.resultText.setText("Обработка PDF еще не реализована.");
-            // processPdf(fileUri);
+            // Implement PDF processing using the new PDFAnonymizer class
+            new Thread(() -> {
+                Uri resultUri = PDFAnonymizer.anonymizePDF(this, fileUri);
+
+                runOnUiThread(() -> {
+                    if (resultUri != null) {
+                        binding.resultText.setText("PDF успешно анонимизирован и сохранен: " + resultUri.getPath());
+                        Toast.makeText(this, "PDF успешно анонимизирован", Toast.LENGTH_SHORT).show();
+
+                        // Open the anonymized PDF with a PDF viewer app
+                        Intent intent = new Intent(Intent.ACTION_VIEW);
+                        intent.setDataAndType(resultUri, "application/pdf");
+                        intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                        try {
+                            startActivity(intent);
+                        } catch (Exception e) {
+                            Toast.makeText(this, "Не удалось открыть PDF. Файл сохранен по пути: " +
+                                    resultUri.getPath(), Toast.LENGTH_LONG).show();
+                        }
+                    } else {
+                        binding.resultText.setText("Ошибка при обработке PDF файла.");
+                        Toast.makeText(this, "Ошибка при обработке PDF файла", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }).start();
         } else {
             Toast.makeText(this, "Файлы этого типа пока не поддерживаются: " + mimeType, Toast.LENGTH_SHORT).show();
             binding.resultText.setText("Файлы этого типа пока не поддерживаются: " + mimeType);

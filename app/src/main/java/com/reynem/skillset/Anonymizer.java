@@ -1,66 +1,65 @@
 package com.reynem.skillset;
 
+import android.os.Build;
+
 import java.util.regex.Pattern;
 
 public class Anonymizer {
-    //TODO: ИЗМЕНИТЬ НА НОРМАЛЬНУЮ ЛОГИКУ
+    // Основные паттерны
     private static final Pattern IIN_PATTERN = Pattern.compile("\\b\\d{12}\\b");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("(\\+7|8)[\\s()-]*(\\d[\\s()-]*){10}");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b");
+    private static final Pattern PASSPORT_PATTERN = Pattern.compile("\\b[NР][\\s-]*\\d{4,9}\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern DRIVER_LICENSE_PATTERN = Pattern.compile("\\b\\d{10,12}\\b");
+    private static final Pattern DATE_PATTERN = Pattern.compile("\\b\\d{2}[./]\\d{2}[./]\\d{4}\\b");
+
+    // Улучшенный паттерн для ФИО (с учетом казахских имен и двойных фамилий)
+    private static final Pattern FIO_PATTERN = Pattern.compile(
+            "\\b([А-ЯЁӘҒҚҢӨҰҮҺ][а-яёәғқңөұүһі-]+[ -]?){2,3}\\b"
+    );
+
+    // Замена для разных типов данных
     private static final String IIN_REPLACEMENT = "[ИИН]";
-
-    // TODO: ИЗМЕНИТЬ НА НОРМАЛЬНУЮ ЛОГИКУ
-    // В реальности для ФИО нужен более сложный подход (NER или более точные регулярные выражения).
-    // Этот паттерн может дать много ложных срабатываний.
-    private static final Pattern FIO_PATTERN = Pattern.compile("\\b[А-ЯЁ][а-яё]+(\\s+[А-ЯЁ][а-яё]+){1,2}\\b");
-    private static final Pattern FIO_ENG_PATTERN = Pattern.compile("\\b[A-Z][a-z]+(\\s+[A-Z][a-z]+){1,2}\\b");
-    private static final Pattern BANK_ACCOUNT_PATTERN_KZ_IBAN = Pattern.compile("\\bKZ[A-Z0-9]{18}\\b", Pattern.CASE_INSENSITIVE);
-    // Упрощенный вариант для номеров карт (например, 16 цифр, возможно, разделенных пробелами или дефисами)
-    private static final Pattern BANK_CARD_PATTERN = Pattern.compile("\\b\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}\\b");
-
+    private static final String PHONE_REPLACEMENT = "[ТЕЛЕФОН]";
+    private static final String EMAIL_REPLACEMENT = "[EMAIL]";
+    private static final String PASSPORT_REPLACEMENT = "[ПАСПОРТ]";
+    private static final String DRIVER_LICENSE_REPLACEMENT = "[ВОД.УДОСТ]";
+    private static final String DATE_REPLACEMENT = "[ДАТА]";
     private static final String FIO_REPLACEMENT = "[ФИО]";
-    private static final String BANK_ACCOUNT_REPLACEMENT = "[НОМЕР СЧЕТА/КАРТЫ]";
 
     public static String anonymizeText(String inputText) {
-        if (inputText == null || inputText.isEmpty()) {
-            return "";
+        if (inputText == null || inputText.isEmpty()) return "";
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return inputText.lines()
+                    .map(Anonymizer::processLine)
+                    .reduce((a, b) -> a + "\n" + b)
+                    .orElse("");
         }
+        return inputText;
+    }
 
-        StringBuilder anonymized = new StringBuilder();
-        String[] lines = inputText.split("\\r?\\n");
+    private static String processLine(String line) {
+        String result = line;
 
-        for (String line : lines) {
-            String processedLine = anonymizeLine(line);
-            anonymized.append(processedLine).append("\n");
-        }
+        // Порядок важен! Сначала обрабатываем сложные паттерны
+        result = FIO_PATTERN.matcher(result).replaceAll(FIO_REPLACEMENT);
+        result = PHONE_PATTERN.matcher(result).replaceAll(PHONE_REPLACEMENT);
+        result = EMAIL_PATTERN.matcher(result).replaceAll(EMAIL_REPLACEMENT);
+        result = PASSPORT_PATTERN.matcher(result).replaceAll(PASSPORT_REPLACEMENT);
+        result = DRIVER_LICENSE_PATTERN.matcher(result).replaceAll(DRIVER_LICENSE_REPLACEMENT);
+        result = IIN_PATTERN.matcher(result).replaceAll(IIN_REPLACEMENT);
+        result = DATE_PATTERN.matcher(result).replaceAll(DATE_REPLACEMENT);
 
-        return anonymized.toString();
+        return result;
     }
 
     public static boolean containsPersonalData(String text) {
         return FIO_PATTERN.matcher(text).find() ||
-                FIO_ENG_PATTERN.matcher(text).find() ||
-                IIN_PATTERN.matcher(text).find() ||
-                BANK_ACCOUNT_PATTERN_KZ_IBAN.matcher(text).find() ||
-                BANK_CARD_PATTERN.matcher(text).find();
-    }
-
-    private static String anonymizeLine(String line) {
-        String result = line;
-
-        // Обработка ИИН
-        result = IIN_PATTERN.matcher(result).replaceAll(IIN_REPLACEMENT);
-
-        // Обработка русскоязычных ФИО
-        result = FIO_PATTERN.matcher(result).replaceAll(FIO_REPLACEMENT);
-
-        // Обработка англоязычных ФИО
-        result = FIO_ENG_PATTERN.matcher(result).replaceAll(FIO_REPLACEMENT);
-
-        // Обработка банковских счетов
-        result = BANK_ACCOUNT_PATTERN_KZ_IBAN.matcher(result).replaceAll(BANK_ACCOUNT_REPLACEMENT);
-
-        // Обработка номеров карт
-        result = BANK_CARD_PATTERN.matcher(result).replaceAll(BANK_ACCOUNT_REPLACEMENT);
-
-        return result;
+                PHONE_PATTERN.matcher(text).find() ||
+                EMAIL_PATTERN.matcher(text).find() ||
+                PASSPORT_PATTERN.matcher(text).find() ||
+                DRIVER_LICENSE_PATTERN.matcher(text).find() ||
+                IIN_PATTERN.matcher(text).find();
     }
 }

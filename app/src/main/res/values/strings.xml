@@ -2,4 +2,9 @@
     <string name="app_name">skillset</string>
     <string name="send_file">Отправить файл</string>
     <string name="anonymize_text">Анонимизировать текст</string>
+    <string name="upload">Загрузить файл для анонимизации</string>
+    <string name="resulthere">Результат будет здесь</string>
+    <string name="imageadf">Анонимизированное изображение</string>
+    <string name="enter_text">Введите текст для анонимизации</string>
+    <string name="loacl">Локальная Анонимизация</string>
 </resources>
