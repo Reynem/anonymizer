@@ -66,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
         PDFBoxResourceLoader.init(getApplicationContext());
 
+
         binding.AnonFile.setOnClickListener(v -> {
             openFilePicker();
             binding.resultImageView.setVisibility(View.VISIBLE);
